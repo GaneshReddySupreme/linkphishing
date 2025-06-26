@@ -1,18 +1,22 @@
+const fs = require("fs");
+const path = require("path");
+const { WebRiskServiceClient } = require("@google-cloud/web-risk");
 const express = require("express");
 const cors = require("cors");
-const { WebRiskServiceClient } = require("@google-cloud/web-risk");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 
-// Initialize the Web Risk client with your service account key
+// Decode base64 env and write to temp file
+const keyPath = path.join("/tmp", "key.json");
+fs.writeFileSync(keyPath, Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, "base64"));
+
 const client = new WebRiskServiceClient({
-  keyFilename: "./key.json", // Path to your service account key
+  keyFilename: keyPath,
 });
 
-// API endpoint: /check-url?url=https://example.com
 app.get("/check-url", async (req, res) => {
   const inputUrl = req.query.url;
 
