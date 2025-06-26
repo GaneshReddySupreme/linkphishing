@@ -1,56 +1,44 @@
 const express = require("express");
-const axios = require("axios");
-const crypto = require("crypto");
-const dotenv = require("dotenv");
 const cors = require("cors");
-
-dotenv.config();
+const { WebRiskServiceClient } = require("@google-cloud/web-risk");
 
 const app = express();
-app.use(cors()); // Allow all origins by default
-app.use(express.json());
+const PORT = process.env.PORT || 5000;
 
-// Hashing function as per Web Risk API
-const hashUrl = (url) => {
-  return crypto.createHash("sha256").update(url).digest("base64");
-};
+app.use(cors());
 
-// Route to check URL against Google's Web Risk API
-app.post("/check-url", async (req, res) => {
-  const { url } = req.body;
+// Initialize the Web Risk client with your service account key
+const client = new WebRiskServiceClient({
+  keyFilename: "./key.json", // Path to your service account key
+});
 
-  if (!url) {
-    return res.status(400).json({ error: "URL is required" });
+// API endpoint: /check-url?url=https://example.com
+app.get("/check-url", async (req, res) => {
+  const inputUrl = req.query.url;
+
+  if (!inputUrl) {
+    return res.status(400).json({ error: "Missing URL parameter" });
   }
 
   try {
-    const apiKey = process.env.WEBRISK_API_KEY;
-    console.log("Checking URL:", url);
-    console.log("Using API Key:", apiKey ? "Yes" : "No");
+    const [response] = await client.searchUris({
+      uri: inputUrl,
+      threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"],
+    });
 
-    const response = await axios.get(
-      `https://webrisk.googleapis.com/v1/uris:search?key=${apiKey}&uri=${encodeURIComponent(
-        url
-      )}`
-    );
+    const isSafe = !response.threat;
 
-    const threat = response.data.threat;
-
-    if (threat) {
-      return res.json({
-        status: "malicious",
-        threatTypes: threat.threatTypes,
-      });
-    } else {
-      return res.json({ status: "safe" });
-    }
+    res.json({
+      url: inputUrl,
+      safe: isSafe,
+      threat: response.threat || null,
+    });
   } catch (err) {
-    console.error("🔥 ERROR:", err.response?.data || err.message);
-    return res.status(500).json({ error: "Failed to check URL" });
+    console.error("Error checking URL:", err.message);
+    res.status(500).json({ error: "Failed to check URL" });
   }
 });
 
-const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Web Risk API Server running on http://localhost:${PORT}`);
+  console.log(`✅ Web Risk API running at http://localhost:${PORT}`);
 });
